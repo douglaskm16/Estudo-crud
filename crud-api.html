@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lista de Jogos</title>
+  <style>
+    * {
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: rgb(116, 116, 116);
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 400px;
+      margin-bottom: 20px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    form input {
+      padding: 6px;
+      border: none;
+      border-radius: 4px;
+    }
+
+    li {
+      margin: 10px 0;
+      list-style: none;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 10px;
+      border-radius: 6px;
+    }
+
+    .item-lista {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .botoes {
+      margin-top: 5px;
+    }
+
+    input[value="Remover"] {
+      background-color: red;
+      color: white;
+      padding: 4px 8px;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    input[value="Editar"], input[value="Atualizar"] {
+      background-color: rgb(255, 119, 0);
+      color: white;
+      margin-right: 5px;
+      padding: 4px 8px;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <form onsubmit="return false;">
+    <h2>Gerenciar Jogos</h2>
+    <input type="text" id="nome" placeholder="Nome do Jogo">
+    <input type="text" id="tipo" placeholder="Tipo/Gênero">
+    <input type="number" id="nota" placeholder="Nota (0 a 10)" min="0" max="10">
+    <input type="text" id="review" placeholder="Review">
+    <input type="button" value="Adicionar" id="botao" onclick="salvarJogo()">
+  </form>
+
+  <ul id="lista">
+    <!-- Os jogos da API vão aparecer aqui -->
+  </ul>
+
+  <script>
+    const inputNome = document.getElementById('nome');
+    const inputTipo = document.getElementById('tipo');
+    const inputNota = document.getElementById('nota');
+    const inputReview = document.getElementById('review');
+    const botao = document.getElementById('botao');
+    const lista = document.getElementById('lista');
+
+    const API_URL = 'https://apijogos-w1v1.onrender.com/jogos';
+    let id_editando = null; // Guarda o ID do jogo que está sendo editado
+
+    // 1. CARREGAR OS JOGOS AO ABRIR A PÁGINA (GET)
+    async function carregarJogos() {
+      try {
+        const resposta = await fetch(API_URL);
+        const jogos = await resposta.json();
+        
+        lista.innerHTML = '';
+        jogos.forEach(jogo => renderizarJogo(jogo));
+      } catch (erro) {
+        console.error("Erro ao carregar jogos:", erro);
+      }
+    }
+
+    // Desenha o jogo na tela
+    function renderizarJogo(jogo) {
+      const li = document.createElement('li');
+      li.setAttribute('data-id', jogo.id);
+      li.innerHTML = `
+        <div class="item-lista">
+          <strong>${jogo.nome}</strong> (${jogo.tipo}) - Nota: ${jogo.nota}/10
+          <p><em>"${jogo.review}"</em></p>
+          <div class="botoes">
+            <input type="button" value="Editar" onclick='prepararEdicao(${JSON.stringify(jogo)})'>
+            <input type="button" value="Remover" onclick="removerJogo(${jogo.id}, this)">
+          </div>
+        </div>
+      `;
+      lista.appendChild(li);
+    }
+
+    // 2. ADICIONAR OU ATUALIZAR (POST / PUT)
+    async function salvarJogo() {
+      if (inputNome.value.trim() === "") return;
+
+      const dadosJogo = {
+        nome: inputNome.value,
+        tipo: inputTipo.value,
+        nota: Number(inputNota.value),
+        review: inputReview.value
+      };
+
+      try {
+        if (id_editando == null) {
+          // Criar novo (POST)
+          const resposta = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosJogo)
+          });
+          const novoJogo = await resposta.json();
+          renderizarJogo(novoJogo);
+        } else {
+          // Atualizar existente (PUT)
+          await fetch(`${API_URL}/${id_editando}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosJogo)
+          });
+
+          // Atualiza visualmente na tela sem precisar recarregar tudo
+          carregarJogos(); // A forma mais rápida e limpa para múltiplos campos
+
+          id_editando = null;
+          botao.value = 'Adicionar';
+        }
+
+        limparCampos();
+      } catch (erro) {
+        console.error("Erro ao salvar jogo:", erro);
+      }
+    }
+
+    // Preenche o formulário com os dados do jogo para edição
+    function prepararEdicao(jogo) {
+      id_editando = jogo.id;
+      inputNome.value = jogo.nome;
+      inputTipo.value = jogo.tipo;
+      inputNota.value = jogo.nota;
+      inputReview.value = jogo.review;
+
+      botao.value = 'Atualizar';
+      inputNome.focus();
+    }
+
+    // 3. REMOVER JOGO (DELETE)
+    async function removerJogo(id, bt) {
+      try {
+        await fetch(`${API_URL}/${id}`, {
+          method: 'DELETE'
+        });
+
+        // Se o item deletado for o mesmo que estava em edição, reseta o form
+        if (id_editando === id) {
+          id_editando = null;
+          botao.value = 'Adicionar';
+          limparCampos();
+        }
+
+        bt.parentElement.parentElement.parentElement.remove();
+      } catch (erro) {
+        console.error("Erro ao remover jogo:", erro);
+      }
+    }
+
+    function limparCampos() {
+      inputNome.value = '';
+      inputTipo.value = '';
+      inputNota.value = '';
+      inputReview.value = '';
+    }
+
+    // Executa a função para carregar os dados assim que o script iniciar
+    carregarJogos();
+  </script>
+</body>
+</html>
